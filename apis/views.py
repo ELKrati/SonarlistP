@@ -619,10 +619,10 @@ import mysql.connector
 def find_data_by_website_csv(search_website):
     # Establish a connection to the MySQL database
     connection = mysql.connector.connect(
-        host='your_host',
-        user='your_username',
-        password='your_password',
-        database='your_database'
+        host='localhost',
+        user='root',
+        password='Ayoub@1209',
+        database='sonarlist'
     )
 
     # Create a cursor to execute queries
