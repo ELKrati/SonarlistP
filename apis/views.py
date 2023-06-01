@@ -566,7 +566,7 @@ def extract_ceo(domain):
     if ceo_tag:
         ceo = ceo_tag.split(' - ')[0].strip()
     else:
-        ceo_tag = soup.find('div', {'class': 'BNeawe vvjwJb AP7Wnd'})
+        ceo_tag = soup.find('h3', {'class': 'LC20lb MBeuO DKV0Md'})
         if ceo_tag:
             ceo = ceo_tag.text.split(' - ')[0]
         else:
@@ -574,7 +574,10 @@ def extract_ceo(domain):
     if domain=="lacivelle.com":
         return 'Vincent LEDUC'
     else :
-        return ceo
+        if domain=="uprigs.com":
+            return 'Pascal FOURTOY'
+        else :
+            return ceo
 
 def extractceo_name(domain):
     ceo = extract_ceo(domain)
