@@ -554,24 +554,24 @@ def get_website_age(creation_datetime):
     return None
 
 def extract_ceo(domain):
-    url = 'https://www.google.com/search?q=linkedin+ceo+of+{}&rlz=1C1GCEU_enUS832US832&oq=linkedin+ceo+of+{}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8'.format(domain, domain)
-    user_agent=get_random_user_agent()
-    headers = {'User-Agent': user_agent}
+    query = f"linkedin CEO of {domain}"
+    url = f"https://www.google.com/search?q={query}&rlz=1C1GCEU_enUS832US832&oq={query}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8"
+
+    headers = {'User-Agent': 'Mozilla/5.0'}
     response = requests.get(url, headers=headers)
-    print(url)
     soup = BeautifulSoup(response.text, 'html.parser')
-    with open("index.html", "w", encoding='utf-8') as file:
-        file.write(str(soup))
-    ceo_tag = soup.find('div', {'class': 'BNeawe vvjwJb AP7Wnd'}).text
-    print(ceo_tag)
+
+    ceo_tag = soup.find('div', {'class': 'BNeawe vvjwJb AP7Wnd'})
     if ceo_tag:
-        ceo = ceo_tag.split(' - ')[0].strip()
+        ceo_name = ceo_tag.text.strip().split(' - ')[0]
     else:
         ceo_tag = soup.find('h3', {'class': 'LC20lb MBeuO DKV0Md'})
         if ceo_tag:
-            ceo = ceo_tag.text.split(' - ')[0]
+            ceo_name = ceo_tag.text.strip().split(' - ')[0]
         else:
-            ceo = "Not found"
+            ceo_name = "Not found"
+
+    return ceo_name
     if domain=="lacivelle.com":
         return 'Vincent LEDUC'
     else :
