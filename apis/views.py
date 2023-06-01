@@ -614,24 +614,41 @@ def extractemployesapi(domain):
         print(response.text) 
 
 
+import mysql.connector
+
 def find_data_by_website_csv(search_website):
-    file_path = '/Users/buropa/Downloads/free_company_dataset_2.csv'
-    send_message_to_socketio('Extract Ceo email.')
-    with open(file_path, 'r', encoding='utf-8') as input_file:
-        reader = csv.DictReader(input_file)
-        print('begin process read file csv company')
-        for row in reader:
-            website = row['website']
-            if website == search_website:
-                print('row:',row)
-                return {
-                    'name': row['name'],
-                    'industry': row['industry'],
-                    'locality': row['locality'],
-                    'region': row['region'],
-                    'country':row['country'],
-                    'linkedin':row['linkedin_url']
-                }
+    # Establish a connection to the MySQL database
+    connection = mysql.connector.connect(
+        host='your_host',
+        user='your_username',
+        password='your_password',
+        database='your_database'
+    )
+
+    # Create a cursor to execute queries
+    cursor = connection.cursor()
+
+    # Execute the query to find data based on the search_website
+    query = f"SELECT name, industry, locality, region, country, linkedin_url FROM data_csv WHERE website = '{search_website}'"
+    cursor.execute(query)
+
+    # Fetch the first matching row
+    row = cursor.fetchone()
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+
+    if row:
+        # Return the fetched row as a dictionary
+        return {
+            'name': row[0],
+            'industry': row[1],
+            'locality': row[2],
+            'region': row[3],
+            'country': row[4],
+            'linkedin': row[5]
+        }
 
     # Return None if no matching website is found
     return None
@@ -733,19 +750,19 @@ def index(request):
         if len(CEO_name.split())>1:
             if CEO_email:
                 CEO_email=CEO_email
-        #     data = find_data_by_website_csv(domain_name)
-        # if data:
-        #     print(data)
-        #     company_name=data['name']
-        #     industry_str=data['industry']
-        #     city=data['locality']
-        #     country=data['country']
-        #     if data['linkedin']:
-        #         linkedin_url = data['linkedin'].strip()
-        #         url_parts = linkedin_url.split('/')
-        #         c_linkedin=url_parts[-1]
-        #         print(c_linkedin)
-        #         send_message_to_socketio('Please be patient, you will receive your result in a few moments :)')
+            data = find_data_by_website_csv(domain_name)
+        if data:
+            print(data)
+            company_name=data['name']
+            industry_str=data['industry']
+            city=data['locality']
+            country=data['country']
+            if data['linkedin']:
+                linkedin_url = data['linkedin'].strip()
+                url_parts = linkedin_url.split('/')
+                c_linkedin=url_parts[-1]
+                print(c_linkedin)
+                send_message_to_socketio('Please be patient, you will receive your result in a few moments :)')
         if company_name not in domain_name:
             # If not, extract the company name from the domain name
             company_name = domain_name.split('.')[0]
