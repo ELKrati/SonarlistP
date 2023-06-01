@@ -294,11 +294,12 @@ def extract_meta_data(url):
     return meta_title, meta_description
 def get_number_of_indexed_pages(website_url):
     query = f"site:{website_url}"
-    search_url = f"https://www.google.com/search?q={query}&rlz=1C1GCEU_enUS832US832&oq={query}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8"
-
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    search_url = f"https://www.google.com/search?q={query}&gl=MA&rlz=1C1GCEU_enUS832US832&oq={query}&gl=MA&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8"
+    header=get_random_user_agent()
+    headers = {'User-Agent':header}
     try:
         ip=get_random_ip()
+        print(ip)
         response = requests.get(search_url, headers=headers,proxies={'http': 'http://'+ip,'https': 'http://'+ip})
         response.raise_for_status()  # Raise an exception for non-2xx status codes
         
@@ -566,14 +567,16 @@ def get_website_age(creation_datetime):
 
 def extract_ceo(domain):
     query = f"linkedin CEO of {domain}"
-    url = f"https://www.google.com/search?q={query}&rlz=1C1GCEU_enUS832US832&oq={query}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8"
+    url = f"https://www.google.com/search?q={query}&gl=MA"
 
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    response = session.get(url, headers=headers)
+    response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
-
+    with open("index.html", "w", encoding='utf-8') as file:
+        file.write(str(soup))
     ceo_tag = soup.find('div', {'class': 'BNeawe vvjwJb AP7Wnd'})
+    print(ceo_tag)
     if ceo_tag:
+        print(ceo_tag)
         ceo_name = ceo_tag.text.strip().split(' - ')[0]
     else:
         ceo_tag = soup.find('h3', {'class': 'LC20lb MBeuO DKV0Md'})
@@ -943,6 +946,7 @@ def extract_content(url, headers):
         return ''
 
 def traitement(urlpost):
+        
         headers = {
         'User-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -952,6 +956,11 @@ def traitement(urlpost):
         'DNT': '1',
         'Content-Encoding': 'gzip',
         'Connection': 'keep-alive'}
+        ip=get_random_ip()
+        session.proxies = {
+                    'http': 'http://'+ip,
+                    'https': 'http://'+ip
+        }
         try:
             r=session.get(urlpost, headers=headers,timeout=3000)
             ##r=fetch_url(urlpost,sess)
