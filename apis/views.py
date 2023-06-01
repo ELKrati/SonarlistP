@@ -58,13 +58,24 @@ def send_message_to_socketio(message):
         print('The server is down. Try again later.')
     except TimeoutError:
         print('The server is taking too long to respond.')
-
+session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(max_retries=3)
+session.mount('http://', adapter)
+session.mount('https://', adapter)
 def get_random_user_agent():
     with open('apis/user_agents.txt') as file:
         user_agents = file.read().splitlines()
     return random.choice(user_agents)
 
-
+def get_random_ip():
+    response = session.get("https://api.proxyscrape.com/v2/account/datacenter_shared/proxy-list?auth=tvmrk73kgpxssjfsmrb2&type=displayproxies&country[]=all&protocol=http&format=json&status=online")
+    
+    if response.status_code == 200:
+        ip_data = response.json()["data"]
+        ip_list = [entry[0] for entry in ip_data]
+        return random.choice(ip_list)
+    else:
+        raise Exception("API request failed with status code {}".format(response.status_code))
 def extract_ceo_api(ceo):
     import requests
 
@@ -147,7 +158,7 @@ def get_logo_url(website_url):
     response = requests.head(clearbit_url)
     try:
         # Check if Clearbit has a valid logo
-        response = requests.get(clearbit_url, timeout=5)
+        response = session.get(clearbit_url, timeout=5)
 
     except (requests.exceptions.Timeout, requests.exceptions.RequestException):
         print(f"Timed out or failed to connect while attempting to access {clearbit_url}")
@@ -157,7 +168,7 @@ def get_logo_url(website_url):
 
     # If Clearbit does not have a logo, scrape the website for the logo
     try:
-        response = requests.get(website_url, timeout=5)
+        response = session.get(website_url, timeout=5)
         soup = BeautifulSoup(response.content, 'html.parser')
 
         logo_tags = [
@@ -180,7 +191,7 @@ def get_logo_url(website_url):
 def extract_favicon(url):
     print('Look for favicon in url.')
     try:
-        response = requests.get(url, timeout=5)
+        response = session.get(url, timeout=5)
     except (requests.exceptions.Timeout, requests.exceptions.RequestException):
         print(f"Timed out or failed to connect while attempting to access {url}")
         return None
@@ -216,7 +227,7 @@ def download_favicon(url):
         #     logo_name += '.png'  # Add default extension if none exists
         # output_path = os.path.join(output_dir, f"logo-{random.randint(100000, 999999)}-{logo_name}")
         # try:
-        #     response = requests.get(logo_url, timeout=5)
+        #     response = session.get(logo_url, timeout=5)
         #     # (Remaining code omitted for brevity)
         # except (requests.exceptions.Timeout, requests.exceptions.RequestException):
         #     print(f"Timed out or failed to connect while attempting to download logo from {logo_url}")
@@ -237,7 +248,7 @@ def download_favicon(url):
     if favicon_url:
         if favicon_url.endswith('.ico'):
             try:
-                response = requests.get(favicon_url, timeout=5)
+                response = session.get(favicon_url, timeout=5)
                 if response.status_code == 200:
                     favicon_data = response.content
                     favicon = Image.open(BytesIO(favicon_data))
@@ -260,7 +271,7 @@ def download_favicon(url):
 def extract_meta_data(url):
     user_agent=get_random_user_agent()
     headers = {'User-Agent': user_agent}
-    response = requests.get(url,headers=headers)
+    response = session.get(url,headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # Extract the title
@@ -282,13 +293,13 @@ def extract_meta_data(url):
 
     return meta_title, meta_description
 def get_number_of_indexed_pages(website_url):
-    search_url = f"https://www.google.com/search?q=site:{website_url}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0"
-    }
-    
+    query = f"site:{website_url}"
+    search_url = f"https://www.google.com/search?q={query}&rlz=1C1GCEU_enUS832US832&oq={query}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8"
+
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        response = requests.get(search_url, headers=headers)
+        ip=get_random_ip()
+        response = requests.get(search_url, headers=headers,proxies={'http': 'http://'+ip,'https': 'http://'+ip})
         response.raise_for_status()  # Raise an exception for non-2xx status codes
         
         soup = BeautifulSoup(response.text, "html.parser")
@@ -332,7 +343,7 @@ def extract_legal_info(website_url):
     }
 
     try:
-        response = requests.get(website_url, headers=headers)
+        response = session.get(website_url, headers=headers)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             legal_links = find_legal_links(soup)
@@ -354,7 +365,7 @@ def extract_legal_info(website_url):
 def extract_urls(url):
     user_agent=get_random_user_agent()
     headers = {'User-Agent': user_agent}
-    response = requests.get(url,headers=headers)
+    response = session.get(url,headers=headers)
     # Parse the HTML content using BeautifulSoup
     soup = BeautifulSoup(response.content, 'html.parser')
     # Find all links on the page
@@ -378,7 +389,7 @@ def extract_urls(url):
 def get_with_headers(url):
     user_agent=get_random_user_agent()
     headers = {'User-Agent': user_agent}
-    return requests.get(url, headers=headers)
+    return session.get(url, headers=headers)
 
 def extract_phone_numbers(url):
     # Extract the top 5 valid URLs of the website
@@ -449,7 +460,7 @@ def extract_company_email(url, company_name):
     try:
         with ThreadPoolExecutor(max_workers=5) as executor:
             # Start tasks for all GET requests and store the Future objects
-            futures = [executor.submit(requests.get, url, timeout=5) for url in urls]
+            futures = [executor.submit(session.get, url, timeout=5) for url in urls]
             for future in futures:
                 try:
                     # Try to get the result of the Future
@@ -558,7 +569,7 @@ def extract_ceo(domain):
     url = f"https://www.google.com/search?q={query}&rlz=1C1GCEU_enUS832US832&oq={query}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8"
 
     headers = {'User-Agent': 'Mozilla/5.0'}
-    response = requests.get(url, headers=headers)
+    response = session.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     ceo_tag = soup.find('div', {'class': 'BNeawe vvjwJb AP7Wnd'})
@@ -585,10 +596,10 @@ def extractceo_name(domain):
     print(f"CEO of {domain}: {ceo}")
     if ceo:
         data =extract_ceo_api(ceo)
-        if data:
+        if data and 'result' in data and 'PERSON' in data['result']:
             names = data['result']['PERSON']
         else:
-            names=HumanName(ceo)
+            names=None
         if names:
             return str(names)
         else:
@@ -670,6 +681,12 @@ def get_data_from_api(website_url):
 
 @api_view(['GET', 'POST'])
 def index(request):
+    ip=get_random_ip()
+    print(ip)
+    session.proxies = {
+                'http': 'http://'+ip,
+                'https': 'http://'+ip
+    }
     if request.method == 'POST':
         data=request.POST
         url=request.data["website"]
@@ -794,7 +811,7 @@ def valid_url(request):
             user_agent=get_random_user_agent()
             headers = {'User-Agent': user_agent}
             print(valid_url)
-            response = requests.get(valid_url,headers=headers)
+            response = session.get(valid_url,headers=headers)
             print(response)
             if response.status_code == 200:
                 return JsonResponse({"website":valid_url}, safe=False)
@@ -850,7 +867,7 @@ def get_html_content(urlpost):
     if not urlpost.startswith(("http://", "https://")):
         urlpost = "http://" + urlpost
     try:
-        r = requests.get(urlpost)
+        r = session.get(urlpost)
         if r.status_code == 200:
             # Parsing the HTML content of the page
             soup = BeautifulSoup(r.content, "html.parser")
@@ -861,7 +878,7 @@ def get_html_content(urlpost):
             return links
         else:
             urlpost = "https://" + urlpost.split("//")[-1]
-            r = requests.get(urlpost)
+            r = session.get(urlpost)
             if r.status_code == 200:
                 # Parsing the HTML content of the page
                 soup = BeautifulSoup(r.content, "html.parser")
@@ -905,7 +922,7 @@ def is_valid_url(url):
     return url is not None and regex.search(url)
 def extract_content(url, headers):
     # make HTTP request & retrieve response
-    response = requests.get(url, headers=headers)
+    response = session.get(url, headers=headers)
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, features="html.parser")
         [s.extract() for s in soup(['style', 'script'])]
@@ -936,7 +953,7 @@ def traitement(urlpost):
         'Content-Encoding': 'gzip',
         'Connection': 'keep-alive'}
         try:
-            r=requests.get(urlpost, headers=headers,timeout=3000)
+            r=session.get(urlpost, headers=headers,timeout=3000)
             ##r=fetch_url(urlpost,sess)
         except:
             print('error')
