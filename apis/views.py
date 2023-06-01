@@ -925,7 +925,7 @@ def is_valid_url(url):
     return url is not None and regex.search(url)
 def extract_content(url, headers):
     # make HTTP request & retrieve response
-    response = session.get(url, headers=headers)
+    response = session.get(url, headers=headers, verify=False)
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, features="html.parser")
         [s.extract() for s in soup(['style', 'script'])]
