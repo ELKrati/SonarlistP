@@ -62,6 +62,7 @@ session = requests.Session()
 adapter = requests.adapters.HTTPAdapter(max_retries=3)
 session.mount('http://', adapter)
 session.mount('https://', adapter)
+session.verify = False
 def get_random_user_agent():
     with open('apis/user_agents.txt') as file:
         user_agents = file.read().splitlines()
