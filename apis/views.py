@@ -555,7 +555,8 @@ def get_website_age(creation_datetime):
 
 def extract_ceo(domain):
     url = 'https://www.google.com/search?q=linkedin+ceo+of+{}&rlz=1C1GCEU_enUS832US832&oq=linkedin+ceo+of+{}&aqs=chrome.0.0l8.3029j0j7&sourceid=chrome&ie=UTF-8'.format(domain, domain)
-    headers = {}
+    user_agent=get_random_user_agent()
+    headers = {'User-Agent': user_agent}
     response = requests.get(url, headers=headers)
     print(url)
     soup = BeautifulSoup(response.text, 'html.parser')
