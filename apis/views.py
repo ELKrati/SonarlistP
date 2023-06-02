@@ -50,10 +50,10 @@ def client_emited(data):
 
 def server_emit(data):
     sio.emit('server_emit', data)
-sio.connect('http://localhost:3008')
+sio.connect('https://sonarlist.io/socket', namespaces=['/socket'])
 def send_message_to_socketio(message):
     try:
-        sio.emit('message',message)
+        sio.emit('message',message, namespace='/socket')
     except ConnectionError:
         print('The server is down. Try again later.')
     except TimeoutError:
@@ -69,7 +69,7 @@ def get_random_user_agent():
     return random.choice(user_agents)
 
 def get_random_ip():
-    response = session.get("https://api.proxyscrape.com/v2/account/datacenter_shared/proxy-list?auth=tvmrk73kgpxssjfsmrb2&type=displayproxies&country[]=all&protocol=http&format=json&status=online")
+    response = requests.get("https://api.proxyscrape.com/v2/account/datacenter_shared/proxy-list?auth=tvmrk73kgpxssjfsmrb2&type=displayproxies&country[]=all&protocol=http&format=json&status=online")
     
     if response.status_code == 200:
         ip_data = response.json()["data"]
@@ -77,6 +77,100 @@ def get_random_ip():
         return random.choice(ip_list)
     else:
         raise Exception("API request failed with status code {}".format(response.status_code))
+    
+##############################-------------- New function extract emails and phones -----------------------########################
+
+def scrape_website(url):
+    response = requests.get(url)
+    content = response.text
+
+    urls = extract_urls_new(content, url)
+    print(f"[*] Found {len(urls)} URLs in the website\n")
+
+    emails = []
+    phone_numbers = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = []
+        for url in urls:
+            results.append(executor.submit(scrape_url, url))
+        for result in results:
+            email_result, phone_result = result.result()
+            emails.extend(email_result)
+            phone_numbers.extend(phone_result)
+    
+    return emails, phone_numbers
+
+
+def extract_urls_new(content, base_url):
+    soup = BeautifulSoup(content, 'html.parser')
+    urls = set()
+    parsed_base_url = urlparse(base_url)
+
+    for link in soup.find_all('a', href=True):
+        href = link.get('href')
+        if href.startswith('http') or href.startswith('https'):
+            domain = tldextract.extract(href).domain
+            # Ignore URLs that are not for the same domain as the website
+            if domain == tldextract.extract(base_url).domain:
+                # Append the URL to the list of valid URLs
+                urls.add(href)
+        else:
+            if href.startswith('/') and not href.startswith('#'):
+                urls.add(base_url + href)
+            else:
+                urls.add(base_url+"/" + href)
+    
+    return urls
+
+
+def scrape_url(url):
+    print(f"[+] Scraping {url}")
+    response = requests.get(url)
+    page_content = response.text
+
+    email_result = []
+    phone_result = []
+    email_result = email_scraping(page_content,url)
+    phone_result = phone_scraping(page_content)
+
+    return email_result, phone_result
+
+def email_scraping(content, domain_name):
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+    emails = re.findall(email_pattern, content)
+
+    domain = tldextract.extract(domain_name).domain
+
+    filtered_emails = list(set(email for email in emails if tldextract.extract(email).domain == domain))
+
+    return filtered_emails
+
+def phone_scraping(content):
+    text = content
+    phone_numbers = []
+    for match in phonenumbers.PhoneNumberMatcher(text, 'US'):
+            number = phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.E164)
+            try:
+                parsed_number = phonenumbers.parse(number, None)
+                if not phonenumbers.is_valid_number(parsed_number) or len(number)>10:
+                    print("Invalid phone number.")
+                    if number.startswith('+1'):
+                        number = '+' + number[1:]  # Remove the leading '1' and keep the '+'
+                        print(f"Modified phone number: {number}")
+                    else:
+                        print(f"Invalid phone number format: {number}")
+                        phone_numbers.append(number)
+                else:
+                    phone_numbers.append(number)
+            except phonenumbers.phonenumberutil.NumberParseException:
+                print("Invalid phone number.")
+                continue
+    
+    return phone_numbers
+
+
+##############################-------------- New function extract emails and phones -----------------------########################
+
 def extract_ceo_api(ceo):
     import requests
 
@@ -114,9 +208,13 @@ def get_domain_name(url):
     return domain_name
 
 def get_valid_url(url):
-    if not url.startswith(('http://', 'https://')):
+    url_validity = r'(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]'
+    if re.match(url_validity, url):
+        return url
+    else:
+        if not url.startswith(('http://', 'https://')):
         # Assumes 'https' if no protocol is provided
-        return f'https://{url}'
+            return f'https://{url}'
     return url
 
 
@@ -159,7 +257,7 @@ def get_logo_url(website_url):
     response = requests.head(clearbit_url)
     try:
         # Check if Clearbit has a valid logo
-        response = session.get(clearbit_url, timeout=5)
+        response = requests.get(clearbit_url, timeout=5)
 
     except (requests.exceptions.Timeout, requests.exceptions.RequestException):
         print(f"Timed out or failed to connect while attempting to access {clearbit_url}")
@@ -169,7 +267,7 @@ def get_logo_url(website_url):
 
     # If Clearbit does not have a logo, scrape the website for the logo
     try:
-        response = session.get(website_url, timeout=5)
+        response = requests.get(website_url, timeout=5)
         soup = BeautifulSoup(response.content, 'html.parser')
 
         logo_tags = [
@@ -192,7 +290,7 @@ def get_logo_url(website_url):
 def extract_favicon(url):
     print('Look for favicon in url.')
     try:
-        response = session.get(url, timeout=5)
+        response = requests.get(url, timeout=5)
     except (requests.exceptions.Timeout, requests.exceptions.RequestException):
         print(f"Timed out or failed to connect while attempting to access {url}")
         return None
@@ -228,7 +326,7 @@ def download_favicon(url):
         #     logo_name += '.png'  # Add default extension if none exists
         # output_path = os.path.join(output_dir, f"logo-{random.randint(100000, 999999)}-{logo_name}")
         # try:
-        #     response = session.get(logo_url, timeout=5)
+        #     response = requests.get(logo_url, timeout=5)
         #     # (Remaining code omitted for brevity)
         # except (requests.exceptions.Timeout, requests.exceptions.RequestException):
         #     print(f"Timed out or failed to connect while attempting to download logo from {logo_url}")
@@ -249,7 +347,7 @@ def download_favicon(url):
     if favicon_url:
         if favicon_url.endswith('.ico'):
             try:
-                response = session.get(favicon_url, timeout=5)
+                response = requests.get(favicon_url, timeout=5)
                 if response.status_code == 200:
                     favicon_data = response.content
                     favicon = Image.open(BytesIO(favicon_data))
@@ -272,7 +370,7 @@ def download_favicon(url):
 def extract_meta_data(url):
     user_agent=get_random_user_agent()
     headers = {'User-Agent': user_agent}
-    response = session.get(url,headers=headers)
+    response = requests.get(url,headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # Extract the title
@@ -299,9 +397,9 @@ def get_number_of_indexed_pages(website_url):
     header=get_random_user_agent()
     headers = {'User-Agent':header}
     try:
-        ip=get_random_ip()
-        print(ip)
-        response = requests.get(search_url, headers=headers,proxies={'http': 'http://'+ip,'https': 'http://'+ip})
+        # ip=get_random_ip()
+        # print(ip)
+        response = requests.get(search_url, headers=headers)
         response.raise_for_status()  # Raise an exception for non-2xx status codes
         
         soup = BeautifulSoup(response.text, "html.parser")
@@ -345,7 +443,7 @@ def extract_legal_info(website_url):
     }
 
     try:
-        response = session.get(website_url, headers=headers)
+        response = requests.get(website_url, headers=headers)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             legal_links = find_legal_links(soup)
@@ -367,7 +465,7 @@ def extract_legal_info(website_url):
 def extract_urls(url):
     user_agent=get_random_user_agent()
     headers = {'User-Agent': user_agent}
-    response = session.get(url,headers=headers)
+    response = requests.get(url,headers=headers)
     # Parse the HTML content using BeautifulSoup
     soup = BeautifulSoup(response.content, 'html.parser')
     # Find all links on the page
@@ -391,7 +489,7 @@ def extract_urls(url):
 def get_with_headers(url):
     user_agent=get_random_user_agent()
     headers = {'User-Agent': user_agent}
-    return session.get(url, headers=headers)
+    return requests.get(url, headers=headers)
 
 def extract_phone_numbers(url):
     # Extract the top 5 valid URLs of the website
@@ -462,7 +560,7 @@ def extract_company_email(url, company_name):
     try:
         with ThreadPoolExecutor(max_workers=5) as executor:
             # Start tasks for all GET requests and store the Future objects
-            futures = [executor.submit(session.get, url, timeout=5) for url in urls]
+            futures = [executor.submit(requests.get, url, timeout=5) for url in urls]
             for future in futures:
                 try:
                     # Try to get the result of the Future
@@ -567,6 +665,12 @@ def get_website_age(creation_datetime):
     return None
 
 def extract_ceo(domain):
+    if domain=="lacivelle.com":
+        return 'Vincent LEDUC'
+    if domain=="uprigs.com":
+        return 'Pascal FOURTOY'
+    if domain=="sonarlist.io":
+        return 'Crom Ramen'
     query = f"linkedin CEO of {domain}"
     url = f"https://www.google.com/search?q={query}&gl=MA"
 
@@ -587,13 +691,6 @@ def extract_ceo(domain):
             ceo_name = "Not found"
 
     return ceo_name
-    if domain=="lacivelle.com":
-        return 'Vincent LEDUC'
-    else :
-        if domain=="uprigs.com":
-            return 'Pascal FOURTOY'
-        else :
-            return ceo
 
 def extractceo_name(domain):
     ceo = extract_ceo(domain)
@@ -685,12 +782,12 @@ def get_data_from_api(website_url):
 
 @api_view(['GET', 'POST'])
 def index(request):
-    ip=get_random_ip()
-    print(ip)
-    session.proxies = {
-                'http': 'http://'+ip,
-                'https': 'http://'+ip
-    }
+    # ip=get_random_ip()
+    # print(ip)
+    # session.proxies = {
+    #             'http': 'http://'+ip,
+    #             'https': 'http://'+ip
+    # }
     if request.method == 'POST':
         data=request.POST
         url=request.data["website"]
@@ -710,8 +807,16 @@ def index(request):
         #Get legal link
         legal_infos=extract_legal_info(valid_url)
         #Get phone number 
-        emails=extract_company_email(valid_url,company_name)
-        phone_numbers=extract_phone_numbers(valid_url)
+        # emails=extract_company_email(valid_url,company_name)
+        # phone_numbers=extract_phone_numbers(valid_url)
+        emails, phone_numbers = scrape_website(valid_url)
+        if emails:
+            print(emails)
+            email_address_str=emails[0]
+        else:
+            email_address_str=""
+        if phone_numbers:
+            print(phone_numbers[0])
         logo_url = download_favicon(valid_url)
         Social_media = get_data_from_api(valid_url)
         w = whois.whois(valid_url)
@@ -720,7 +825,9 @@ def index(request):
         print(w.creation_date)
         age = get_website_age(w.creation_date)
         api=extractRS(valid_url)
-        email_address_str=""
+        c_linkedin=""
+        c_twitter=""
+        c_facebook=""
         if api:
             if api['state']==True:
                 c_linkedin=api['data']['linkedin_username']
@@ -729,8 +836,8 @@ def index(request):
                 if not phone_numbers:
                     phone_numbers=api['data']['phones']
                 if api['data']['company_email']!="":
-                    email_address_str=api['data']['company_email']
-                    email_address_str=email_address_str
+                    if not email_address_str:
+                        email_address_str=api['data']['company_email']
                 if meta_description:
                     if len(meta_description)<15:
                         meta_description=api['data']['description']
@@ -775,19 +882,19 @@ def index(request):
         if len(CEO_name.split())>1:
             if CEO_email:
                 CEO_email=CEO_email
-            data = find_data_by_website_csv(domain_name)
-        if data:
-            print(data)
-            company_name=data['name']
-            industry_str=data['industry']
-            city=data['locality']
-            country=data['country']
-            if data['linkedin']:
-                linkedin_url = data['linkedin'].strip()
-                url_parts = linkedin_url.split('/')
-                c_linkedin=url_parts[-1]
-                print(c_linkedin)
-                send_message_to_socketio('Please be patient, you will receive your result in a few moments :)')
+        #     data = find_data_by_website_csv(domain_name)
+        # if data:
+        #     print(data)
+        #     company_name=data['name']
+        #     industry_str=data['industry']
+        #     city=data['locality']
+        #     country=data['country']
+        #     if data['linkedin']:
+        #         linkedin_url = data['linkedin'].strip()
+        #         url_parts = linkedin_url.split('/')
+        #         c_linkedin=url_parts[-1]
+        #         print(c_linkedin)
+        #         send_message_to_socketio('Please be patient, you will receive your result in a few moments :)')
         if company_name not in domain_name:
             # If not, extract the company name from the domain name
             company_name = domain_name.split('.')[0]
@@ -815,7 +922,7 @@ def valid_url(request):
             user_agent=get_random_user_agent()
             headers = {'User-Agent': user_agent}
             print(valid_url)
-            response = session.get(valid_url,headers=headers)
+            response = requests.get(valid_url,headers=headers)
             print(response)
             if response.status_code == 200:
                 return JsonResponse({"website":valid_url}, safe=False)
@@ -871,7 +978,7 @@ def get_html_content(urlpost):
     if not urlpost.startswith(("http://", "https://")):
         urlpost = "http://" + urlpost
     try:
-        r = session.get(urlpost)
+        r = requests.get(urlpost)
         if r.status_code == 200:
             # Parsing the HTML content of the page
             soup = BeautifulSoup(r.content, "html.parser")
@@ -882,7 +989,7 @@ def get_html_content(urlpost):
             return links
         else:
             urlpost = "https://" + urlpost.split("//")[-1]
-            r = session.get(urlpost)
+            r = requests.get(urlpost)
             if r.status_code == 200:
                 # Parsing the HTML content of the page
                 soup = BeautifulSoup(r.content, "html.parser")
@@ -926,7 +1033,7 @@ def is_valid_url(url):
     return url is not None and regex.search(url)
 def extract_content(url, headers):
     # make HTTP request & retrieve response
-    response = session.get(url, headers=headers, verify=False)
+    response = requests.get(url, headers=headers, verify=False)
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, features="html.parser")
         [s.extract() for s in soup(['style', 'script'])]
@@ -963,7 +1070,7 @@ def traitement(urlpost):
                     'https': 'http://'+ip
         }
         try:
-            r=session.get(urlpost, headers=headers,timeout=3000)
+            r=requests.get(urlpost, headers=headers,timeout=3000)
             ##r=fetch_url(urlpost,sess)
         except:
             print('error')
